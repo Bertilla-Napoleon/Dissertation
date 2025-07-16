@@ -14,8 +14,8 @@ DATA_DIRECTORY_ON_SERVER = '/db/shared/phenotyping/PlantNet'
 NUM_CLASSES = None
 
 class Net(nn.Module):
-    def _init_(self, num_classes=1082, input_channels=3):
-        super(Net, self)._init_()
+    def __init__(self, num_classes=1082, input_channels=3):
+        super(Net, self).__init__()
         self.conv1 = nn.Conv2d(input_channels, 32, 3, 1)
         self.conv2 = nn.Conv2d(32, 64, 3, 1)
         self.dropout1 = nn.Dropout(0.25)
