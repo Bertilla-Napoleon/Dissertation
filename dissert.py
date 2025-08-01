@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torchvision import datasets, transforms
+from torchvision import models,datasets, transforms
 from torch.optim.lr_scheduler import StepLR
 import os
 
@@ -12,42 +12,6 @@ IMG_HEIGHT = 224
 IMG_WIDTH = 224
 DATA_DIRECTORY_ON_SERVER = '/db/shared/phenotyping/PlantNet'
 NUM_CLASSES = None
-
-class Net(nn.Module):
-    def __init__(self, num_classes=1082, input_channels=3):
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(input_channels, 32, 3, 1)
-        self.conv2 = nn.Conv2d(32, 64, 3, 1)
-        self.dropout1 = nn.Dropout(0.25)
-        self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(self._get_conv_output_size(input_channels, IMG_HEIGHT, IMG_WIDTH), 128)
-        self.fc2 = nn.Linear(128, num_classes)
-
-    # Helper function to calculate the output size after conv layers and pooling
-    def _get_conv_output_size(self, input_channels, h, w):
-        with torch.no_grad():
-            x = torch.randn(1, input_channels, h, w)
-            x = self.conv1(x)
-            x = F.relu(x)
-            x = self.conv2(x)
-            x = F.relu(x)
-            x = F.max_pool2d(x, 2)
-            return torch.flatten(x, 1).size(1)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.conv2(x)
-        x = F.relu(x)
-        x = F.max_pool2d(x, 2)
-        x = self.dropout1(x)
-        x = torch.flatten(x, 1)
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.dropout2(x)
-        x = self.fc2(x)
-        output = F.log_softmax(x, dim=1)
-        return output
 
 
 def train(args, model, device, train_loader, optimizer, epoch):
@@ -89,10 +53,10 @@ def test(model, device, test_loader):
 def main():
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch Plant Image Classification')
-    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
-                        help='input batch size for training (default: 64)')
-    parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
-                        help='input batch size for testing (default: 1000)')
+    parser.add_argument('--batch-size', type=int, default=16, metavar='N',
+                        help='input batch size for training (default: 16)')
+    parser.add_argument('--test-batch-size', type=int, default=32, metavar='N',
+                        help='input batch size for testing (default: 32)')
     parser.add_argument('--epochs', type=int, default=14, metavar='N',
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=1.0, metavar='LR',
@@ -149,7 +113,7 @@ def main():
     test_kwargs = {'batch_size': args.test_batch_size}
 
     if use_cuda:
-        cuda_kwargs = {'num_workers': os.cpu_count(),
+        cuda_kwargs = {'num_workers': 1,
                        'pin_memory': True,
                        'shuffle': True}
         train_kwargs.update(cuda_kwargs)
@@ -158,18 +122,21 @@ def main():
     train_loader = torch.utils.data.DataLoader(dataset1,**train_kwargs)
     test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
 
-    model = Net(num_classes=NUM_CLASSES, input_channels=3).to(device)
-    optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
+    model = models.resnet18(pretrained=True)
+    model.fc = nn.Linear(model.fc.in_features, NUM_CLASSES)
+    model = model.to(device)
 
+    optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
+
     for epoch in range(1, args.epochs + 1):
         train(args, model, device, train_loader, optimizer, epoch)
         test(model, device, test_loader)
         scheduler.step()
+        torch.cuda.empty_cache()
 
     if args.save_model:
         torch.save(model.state_dict(), "plant_cnn_model.pt")
-
 
 if __name__ == '__main__':
     main()
