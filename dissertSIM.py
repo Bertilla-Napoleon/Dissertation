@@ -9,7 +9,7 @@ from torch.utils.data import Dataset, DataLoader
 
 IMG_SIZE = 224
 BATCH_SIZE = 128
-EPOCHS = 100
+EPOCHS = 14
 TEMPERATURE = 0.5
 LR = 3e-4
 DATA_DIR = '/db/shared/phenotyping/PlantNet/train'
@@ -77,15 +77,15 @@ def nt_xent_loss(z1, z2, temperature):
 
 def train_simclr():
     dataset = UnlabeledDataset(DATA_DIR, simclr_transform)
-    loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
+    loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, pin_memory=True)
 
     model = SimCLRModel().to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
-    for epoch in range(EPOCHS):
+    for epoch in range(1, EPOCHS + 1):
         model.train()
         total_loss = 0
-        for step, (x_i, x_j) in enumerate(loader):
+        for batch_idx, (x_i, x_j) in enumerate(loader):
             x_i = x_i.to(DEVICE)
             x_j = x_j.to(DEVICE)
 
@@ -99,11 +99,16 @@ def train_simclr():
 
             total_loss += loss.item()
 
+            if batch_idx % 10 == 0:  # log every 10 batches
+                percent = 100. * batch_idx / len(loader)
+                processed = batch_idx * len(x_i)
+                total = len(loader.dataset)
+                print(f"Train Epoch: {epoch} [{processed}/{total} ({percent:.0f}%)]\tLoss: {loss.item():.6f}")
+
         avg_loss = total_loss / len(loader)
-        print(f"Epoch [{epoch+1}/{EPOCHS}] - Loss: {avg_loss:.4f}")
+        print(f"Epoch [{epoch}/{EPOCHS}] - Average Loss: {avg_loss:.4f}")
         torch.cuda.empty_cache()
 
     torch.save(model.encoder.state_dict(), "simclr_pretrained_encoder.pth")
-
 if __name__ == '__main__':
     train_simclr()
