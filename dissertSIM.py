@@ -7,8 +7,10 @@ import torch.nn.functional as F
 from torchvision import models, transforms
 from torch.utils.data import Dataset, DataLoader
 
+#os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+
 IMG_SIZE = 224
-BATCH_SIZE = 128
+BATCH_SIZE = 64
 EPOCHS = 14
 TEMPERATURE = 0.5
 LR = 3e-4
@@ -20,7 +22,7 @@ simclr_transform = transforms.Compose([
     transforms.RandomHorizontalFlip(),
     transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
     transforms.RandomGrayscale(p=0.2),
-    transforms.GaussianBlur(kernel_size=23),
+    #transforms.GaussianBlur(kernel_size=23),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406],
                          std=[0.229, 0.224, 0.225])
@@ -43,7 +45,7 @@ class UnlabeledDataset(Dataset):
 class SimCLRModel(nn.Module):
     def __init__(self, base_model='resnet50', projection_dim=128):
         super().__init__()
-        resnet = models.__dict__[base_model](pretrained=False)
+        resnet = models.__dict__[base_model](weights=None)
         self.encoder = nn.Sequential(*list(resnet.children())[:-1])  # Remove fc layer
         self.projector = nn.Sequential(
             nn.Linear(resnet.fc.in_features, 2048),
@@ -76,6 +78,7 @@ def nt_xent_loss(z1, z2, temperature):
     return F.cross_entropy(logits, labels)
 
 def train_simclr():
+    print("Preparing dataset...", flush=True)
     dataset = UnlabeledDataset(DATA_DIR, simclr_transform)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, pin_memory=True)
 
@@ -103,10 +106,10 @@ def train_simclr():
                 percent = 100. * batch_idx / len(loader)
                 processed = batch_idx * len(x_i)
                 total = len(loader.dataset)
-                print(f"Train Epoch: {epoch} [{processed}/{total} ({percent:.0f}%)]\tLoss: {loss.item():.6f}")
+                #print(f"Train Epoch: {epoch} [{processed}/{total} ({percent:.0f}%)]\tLoss: {loss.item():.6f}", flush=True)
 
         avg_loss = total_loss / len(loader)
-        print(f"Epoch [{epoch}/{EPOCHS}] - Average Loss: {avg_loss:.4f}")
+        print(f"Epoch [{epoch}/{EPOCHS}] - Average Loss: {avg_loss:.4f}", flush=True)
         torch.cuda.empty_cache()
 
     torch.save(model.encoder.state_dict(), "simclr_pretrained_encoder.pth")
