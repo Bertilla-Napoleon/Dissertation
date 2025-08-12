@@ -117,7 +117,7 @@ for epoch in range(EPOCHS_HEAD):
         total_loss += loss.item()
     scheduler.step()
     val_acc = evaluate(model)
-    print(f"[Head Train] Epoch {epoch+1}/{EPOCHS_HEAD} - Loss: {total_loss/len(train_loader):.4f} - Val Acc: {val_acc:.2f}%")
+    print(f"[Head Train] Epoch {epoch+1}/{EPOCHS_HEAD} - Loss: {total_loss/len(train_loader):.4f} - Val Acc: {val_acc:.2f}%", flush=True)
 
 # ---------------- PHASE 2: Fine-tune entire model ----------------
 for param in model.encoder.parameters():
@@ -141,7 +141,7 @@ for epoch in range(EPOCHS_FULL):
         total_loss += loss.item()
     scheduler.step()
     val_acc = evaluate(model)
-    print(f"[Full Fine-tune] Epoch {epoch+1}/{EPOCHS_FULL} - Loss: {total_loss/len(train_loader):.4f} - Val Acc: {val_acc:.2f}%")
+    print(f"[Full Fine-tune] Epoch {epoch+1}/{EPOCHS_FULL} - Loss: {total_loss/len(train_loader):.4f} - Val Acc: {val_acc:.2f}%", flush=True)
 
 torch.save(model.state_dict(), "simclr_finetuned_model.pth")
 print("✅ Model saved as simclr_finetuned_model.pth")
