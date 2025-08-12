@@ -10,7 +10,7 @@ IMG_SIZE = 224
 BATCH_SIZE = 64
 LR = 1e-4
 EPOCHS = 10
-NUM_CLASSES = 1081  
+NUM_CLASSES = 1081
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 finetune_transform = transforms.Compose([
@@ -97,6 +97,6 @@ for epoch in range(EPOCHS):
             correct += (predicted == labels).sum().item()
 
     acc = 100 * correct / total
-    print(f"Epoch [{epoch+1}/{EPOCHS}] - Loss: {avg_loss:.4f} - Val Acc: {acc:.2f}%")
+    print(f"Epoch [{epoch+1}/{EPOCHS}] - Loss: {avg_loss:.4f} - Val Acc: {acc:.2f}%", flush=True)
 
 torch.save(model.state_dict(), "simclr_finetuned_model.pth")
