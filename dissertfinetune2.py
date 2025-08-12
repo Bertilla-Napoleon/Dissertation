@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision import models, transforms
 from torch.utils.data import DataLoader, Dataset
+from torch.cuda.amp import autocast, GradScaler
 from PIL import Image
 import glob
 import os
@@ -81,7 +82,7 @@ model.encoder.load_state_dict(pretrained_dict, strict=True)
 
 # ---------------- TRAINING UTILS ----------------
 criterion = nn.CrossEntropyLoss(label_smoothing=0.1)  # helps with noisy labels
-scaler = torch.amp.GradScaler("cuda")  # mixed precision
+scaler = GradScaler()  # mixed precision
 
 def evaluate(model):
     model.eval()
@@ -108,7 +109,7 @@ for epoch in range(EPOCHS_HEAD):
     for imgs, labels in train_loader:
         imgs, labels = imgs.to(DEVICE), labels.to(DEVICE)
         optimizer.zero_grad()
-        with torch.amp.autocast("cuda"):
+        with autocast():
             outputs = model(imgs)
             loss = criterion(outputs, labels)
         scaler.scale(loss).backward()
@@ -132,7 +133,7 @@ for epoch in range(EPOCHS_FULL):
     for imgs, labels in train_loader:
         imgs, labels = imgs.to(DEVICE), labels.to(DEVICE)
         optimizer.zero_grad()
-        with torch.amp.autocast("cuda"):
+        with autocast():
             outputs = model(imgs)
             loss = criterion(outputs, labels)
         scaler.scale(loss).backward()
