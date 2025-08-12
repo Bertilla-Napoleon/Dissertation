@@ -7,17 +7,15 @@ from PIL import Image
 import glob
 import os
 
-# ---------------- CONFIG ----------------
 IMG_SIZE = 224
 BATCH_SIZE = 64
 BASE_LR = 3e-4
 UNFREEZE_LR = 1e-4
-EPOCHS_HEAD = 5       # First train only classifier head
-EPOCHS_FULL = 10      # Then fine-tune entire network
+EPOCHS_HEAD = 5       # train only classifier head
+EPOCHS_FULL = 10      # fine-tune entire network
 NUM_CLASSES = 1081
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# ---------------- DATA ----------------
 train_transform = transforms.Compose([
     transforms.RandomResizedCrop(IMG_SIZE, scale=(0.8, 1.0)),
     transforms.RandomHorizontalFlip(),
@@ -61,12 +59,11 @@ val_dataset = LabeledDataset("/db/shared/phenotyping/PlantNet/val", val_transfor
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
 val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True)
 
-# ---------------- MODEL ----------------
 class FineTuneModel(nn.Module):
     def __init__(self, num_classes=NUM_CLASSES):
         super().__init__()
         resnet = models.resnet50(weights=None)
-        self.encoder = nn.Sequential(*list(resnet.children())[:-1])  # remove FC layer
+        self.encoder = nn.Sequential(*list(resnet.children())[:-1])
         self.fc = nn.Linear(resnet.fc.in_features, num_classes)
 
     def forward(self, x):
@@ -76,13 +73,11 @@ class FineTuneModel(nn.Module):
 
 model = FineTuneModel(num_classes=NUM_CLASSES).to(DEVICE)
 
-# Load pretrained encoder weights
 pretrained_dict = torch.load("simclr_pretrained_encoder.pth", map_location=DEVICE)
 model.encoder.load_state_dict(pretrained_dict, strict=True)
 
-# ---------------- TRAINING UTILS ----------------
-criterion = nn.CrossEntropyLoss(label_smoothing=0.1)  # helps with noisy labels
-scaler = GradScaler()  # mixed precision
+criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+scaler = GradScaler()
 
 def evaluate(model):
     model.eval()
@@ -96,7 +91,6 @@ def evaluate(model):
             correct += (predicted == labels).sum().item()
     return 100 * correct / total
 
-# ---------------- PHASE 1: Train only head ----------------
 for param in model.encoder.parameters():
     param.requires_grad = False
 
@@ -120,7 +114,6 @@ for epoch in range(EPOCHS_HEAD):
     val_acc = evaluate(model)
     print(f"[Head Train] Epoch {epoch+1}/{EPOCHS_HEAD} - Loss: {total_loss/len(train_loader):.4f} - Val Acc: {val_acc:.2f}%", flush=True)
 
-# ---------------- PHASE 2: Fine-tune entire model ----------------
 for param in model.encoder.parameters():
     param.requires_grad = True
 
@@ -145,4 +138,4 @@ for epoch in range(EPOCHS_FULL):
     print(f"[Full Fine-tune] Epoch {epoch+1}/{EPOCHS_FULL} - Loss: {total_loss/len(train_loader):.4f} - Val Acc: {val_acc:.2f}%", flush=True)
 
 torch.save(model.state_dict(), "simclr_finetuned_model.pth")
-print("✅ Model saved as simclr_finetuned_model.pth")
+print("Model saved as simclr_finetuned_model.pth")
