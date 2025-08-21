@@ -58,7 +58,7 @@ NUM_CLASSES = len(train_ds.class_to_idx)
 class SupervisedResNet(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
-        resnet = models.resnet50(weights="IMAGENET1K_V2")  
+        resnet = models.resnet50(weights=None)  
         self.encoder = nn.Sequential(*list(resnet.children())[:-1])  
         self.fc = nn.Linear(resnet.fc.in_features, num_classes)
     def forward(self, x):
