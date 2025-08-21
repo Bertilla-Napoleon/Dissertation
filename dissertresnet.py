@@ -8,10 +8,8 @@ from torch.cuda.amp import autocast, GradScaler
 
 IMG_SIZE   = 224
 BATCH_SIZE = 64
-BASE_LR    = 3e-4
-UNFREEZE_LR= 1e-4
-EPOCHS_HEAD= 5
-EPOCHS_FULL= 10
+UNFREEZE_LR= 3e-4
+EPOCHS_FULL= 14
 DEVICE     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 TRAIN_DIR  = "/db/shared/phenotyping/PlantNet/train"
@@ -83,43 +81,23 @@ def evaluate(model):
     return 100*correct/total
 
 for p in model.encoder.parameters(): 
-    p.requires_grad=False
-
-opt = torch.optim.Adam(model.fc.parameters(), lr=BASE_LR)
-sch = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=EPOCHS_HEAD)
-
-for e in range(EPOCHS_HEAD):
-    model.train(); total_loss=0
-    for imgs, labels in train_loader:
-        imgs, labels = imgs.to(DEVICE), labels.to(DEVICE)
-        opt.zero_grad()
-        with autocast():
-            out = model(imgs)
-            loss = criterion(out, labels)
-        scaler.scale(loss).backward()
-        scaler.step(opt); scaler.update()
-        total_loss += loss.item()
-    sch.step()
-    print(f"[Head] Epoch {e+1}/{EPOCHS_HEAD} - Loss {total_loss/len(train_loader):.4f} - Val {evaluate(model):.2f}%")
-
-for p in model.encoder.parameters(): 
     p.requires_grad=True
 
 optimizer = torch.optim.Adam(model.parameters(), lr=UNFREEZE_LR)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=EPOCHS_FULL)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS_FULL)
 
 for e in range(EPOCHS_FULL):
     model.train(); total_loss=0
     for imgs, labels in train_loader:
         imgs, labels = imgs.to(DEVICE), labels.to(DEVICE)
-        opt.zero_grad()
+        optimizer.zero_grad()
         with autocast():
             out = model(imgs)
             loss = criterion(out, labels)
         scaler.scale(loss).backward()
-        scaler.step(opt); scaler.update()
+        scaler.step(optimizer); scaler.update()
         total_loss += loss.item()
-    sch.step()
+    scheduler.step()
     print(f"[Full] Epoch {e+1}/{EPOCHS_FULL} - Loss {total_loss/len(train_loader):.4f} - Val {evaluate(model):.2f}%")
 
 torch.save(model.state_dict(), OUT_CKPT)
