@@ -117,16 +117,30 @@ else:
 
 criterion_ce = nn.CrossEntropyLoss(label_smoothing=0.1)
 
-def supcon_loss(features: torch.Tensor, labels: torch.Tensor, temperature: float=0.07) -> torch.Tensor:
-    z = F.normalize(features, dim=1)
-    sim = torch.matmul(z, z.T) / temperature                
+def supcon_loss(features: torch.Tensor, labels: torch.Tensor, temperature: float = 0.07) -> torch.Tensor:
+    f32 = features.detach().float()              
+    z = F.normalize(f32, dim=1)                  
+
+    sim = torch.matmul(z, z.T) / temperature     
     B = sim.size(0)
-    mask = torch.eq(labels.view(-1,1), labels.view(1,-1)).float().to(features.device)
-    logits_mask = (1 - torch.eye(B, device=features.device))
-    sim = sim - 1e9 * (1 - logits_mask)
-    log_prob = sim - torch.logsumexp(sim, dim=1, keepdim=True)
-    mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1).clamp(min=1.0)
-    return -mean_log_prob_pos.mean()
+    device = sim.device
+
+    labels = labels.view(-1, 1)
+    pos_mask = torch.eq(labels, labels.T).to(device)   
+    eye = torch.eye(B, device=device, dtype=torch.bool)
+    pos_mask = pos_mask & (~eye)                       
+
+    pos_per_row = pos_mask.sum(dim=1)                  
+    if (pos_per_row == 0).all():
+        return torch.zeros((), device=device)
+
+    neg_inf = -1e9
+    sim_masked = sim.masked_fill(~pos_mask & ~eye, neg_inf)
+
+    log_prob = sim_masked - torch.logsumexp(sim_masked, dim=1, keepdim=True)
+    mean_log_prob_pos = (pos_mask * log_prob).sum(1) / pos_per_row.clamp(min=1)
+    loss = -mean_log_prob_pos[pos_per_row > 0].mean()
+    return loss
 
 @torch.no_grad()
 def evaluate(m: nn.Module) -> float:
@@ -190,13 +204,16 @@ def run_train(head_only: bool):
             with torch.cuda.amp.autocast(enabled=MIXED_PRECISION):
                 logits, feats = model(imgs, return_features=True)
                 ce = criterion_ce(logits, labels)
-                con = supcon_loss(feats, labels, SUPCON_TAU)
-                loss = ce + (0.0 if head_only else SUPCON_LAMBDA * con)
+
+            con = torch.zeros((), device=DEVICE)
+            if not head_only and SUPCON_LAMBDA > 0.0:
+                con = supcon_loss(feats, labels, temperature=SUPCON_TAU)
+
+            loss = ce + (0.0 if head_only else SUPCON_LAMBDA * con)
 
             scaler.scale(loss).backward()
-            
             scaler.unscale_(optimizer)
-            nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP_NORM)
             scaler.step(optimizer)
             scaler.update()
 
@@ -204,7 +221,7 @@ def run_train(head_only: bool):
 
             running += float(loss.item())
             global_step += 1
-
+        
         val_acc = evaluate(ema_model if USE_EMA else model)
         print(f"[{'Head' if head_only else 'Full'}] Epoch {epoch}/{epochs} - "
               f"Loss: {running/len(train_loader):.4f} - Val Acc: {val_acc:.2f}%")
