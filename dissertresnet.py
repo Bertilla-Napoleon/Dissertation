@@ -105,8 +105,8 @@ for e in range(EPOCHS_HEAD):
 for p in model.encoder.parameters(): 
     p.requires_grad=True
 
-opt = torch.optim.Adam(model.parameters(), lr=UNFREEZE_LR)
-sch = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=EPOCHS_FULL)
+optimizer = torch.optim.Adam(model.parameters(), lr=UNFREEZE_LR)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=EPOCHS_FULL)
 
 for e in range(EPOCHS_FULL):
     model.train(); total_loss=0
